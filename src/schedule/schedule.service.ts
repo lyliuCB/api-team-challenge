@@ -1,55 +1,101 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DeleteResult, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Schedule } from './schedule.entity';
-import { ScheduleRO, SchedulesRO } from './schedule.interface';
-import { CreateScheduleDTO } from './dto/creat-schedule.dto';
+import { ScheduleCreateDTO, ScheduleQueryDTO } from './dto/schedule.dto';
 import { UUID } from 'crypto';
+import { Task } from '../tasks/task.entity';
 
 @Injectable()
 export class ScheduleService {
   constructor(
     @InjectRepository(Schedule)
     private scheduleRepository: Repository<Schedule>,
+    @InjectRepository(Task)
+    private taskRepository: Repository<Task>,
   ) {}
 
-  async getAll(query: any): Promise<SchedulesRO> {
-    let schedules;
-    if (query.account_id || query.agent_id) {
-      schedules = await this.scheduleRepository.findBy(query);
+  /*
+   * Get schedule list with query
+   */
+  async list({ account_id, agent_id }: ScheduleQueryDTO): Promise<Schedule[]> {
+    if (account_id || agent_id) {
+      return await this.scheduleRepository.findBy({
+        account_id,
+        agent_id,
+      });
     } else {
-      schedules = await this.scheduleRepository.find();
+      throw new BadRequestException(
+        'Supported query params: [account_id, agent_id]',
+      );
     }
-    const schedulesCount = schedules.length;
-    return { schedules, schedulesCount };
   }
 
-  async getOne(id: UUID): Promise<ScheduleRO | null> {
+  /*
+   *  Get schedule based on id
+   */
+  async get(id: UUID): Promise<Schedule | null> {
+    return await this.scheduleRepository.findOneBy({ id });
+  }
+
+  /*
+   *  Create a new schedule
+   */
+  async create({
+    account_id,
+    agent_id,
+    start_time,
+    end_time,
+  }: ScheduleCreateDTO): Promise<Schedule> {
+    return await this.scheduleRepository.save({
+      account_id,
+      agent_id,
+      start_time,
+      end_time,
+    });
+  }
+
+  /*
+   * update a schedule based on id
+    TODO: add permission for properties that allowed to update
+   */
+  async update(
+    id: UUID,
+    { account_id, agent_id, start_time, end_time }: ScheduleCreateDTO,
+  ): Promise<Schedule> {
     const schedule = await this.scheduleRepository.findOneBy({ id });
     if (schedule) {
-      return { schedule };
+      schedule.account_id = account_id || schedule.account_id;
+      schedule.agent_id = agent_id || schedule.agent_id;
+      schedule.start_time = start_time || schedule.start_time;
+      schedule.end_time = end_time || schedule.end_time;
+
+      return await this.scheduleRepository.save(schedule);
     } else {
-      return schedule;
+      throw new BadRequestException(`Schedule ${id} not updated`);
     }
   }
 
-  async create(entries: CreateScheduleDTO): Promise<ScheduleRO> {
-    const schedule = await this.scheduleRepository.save(entries);
-    return { schedule };
-  }
+  /*
+   * delete a schedule based on id 
+  TODO: allow delete when end_time expired; delete associated tasks
+   */
+  async delete(id: UUID): Promise<any> {
+    const schedule = await this.scheduleRepository.findOneBy({ id });
+    if (!schedule) {
+      throw new BadRequestException(` Schedule ${id} not existed`);
+    }
+    const tasks = await this.taskRepository.findBy({ schedule_id: id });
+    if (tasks.length > 0) {
+      throw new BadRequestException(`Tasks associated with Schedule ${id}`);
+    }
 
-  async update(id: UUID, entity: CreateScheduleDTO): Promise<ScheduleRO> {
-    const schedule = new Schedule();
-    schedule.id = id;
-    schedule.account_id = entity.account_id;
-    schedule.agent_id = entity.agent_id;
-    schedule.start_time = entity.start_time;
-    schedule.end_time = entity.end_time;
-    await this.scheduleRepository.update(id, schedule);
-    return { schedule };
-  }
+    const result = await this.scheduleRepository.delete({ id });
 
-  async delete(id: UUID): Promise<DeleteResult> {
-    return await this.scheduleRepository.delete({ id });
+    if (!result.affected) {
+      throw new BadRequestException(`Schedule ${id} not existed`);
+    } else {
+      return { message: `Schedule ${id} deleted` };
+    }
   }
 }

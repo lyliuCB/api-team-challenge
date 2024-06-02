@@ -1,42 +1,146 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { TaskCreateDTO } from './dto/task.dto';
 import { TaskController } from './task.controller';
 import { TaskService } from './task.service';
+import { TaskType } from './task.interface';
+
+const taskCreateDTO: TaskCreateDTO = {
+  account_id: 223,
+  schedule_id: '7b07c65e-d681-4598-be1f-e0652c2bc5ee',
+  start_time: new Date('2024-06-07T01:00:00.000Z'),
+  duration: 200,
+  type: TaskType.work,
+};
 
 describe('TaskController', () => {
   let taskController: TaskController;
-  const mockTask = {
-    id: '7dc5319f-69b0-4934-827b-60191fc289b0',
-    account_id: 1111,
-    schedule_id: 'e69a62ae-c69d-4360-a736-0363af78a934',
-    start_time: new Date(),
-    duration: new Date(),
-    type: 'work',
-  };
+  let taskService: TaskService;
 
   beforeEach(async () => {
     const app: TestingModule = await Test.createTestingModule({
       controllers: [TaskController],
       providers: [
+        TaskService,
         {
           provide: TaskService,
           useValue: {
-            getOne: jest.fn(() => {
-              return { task: mockTask };
-            }),
+            create: jest.fn().mockImplementation((task: TaskCreateDTO) =>
+              Promise.resolve({
+                id: '63872dfe-760c-40e3-a725-dfb5bcebd017',
+                ...task,
+              }),
+            ),
+            update: jest.fn().mockImplementation((id, task: TaskCreateDTO) =>
+              Promise.resolve({
+                id,
+                ...task,
+              }),
+            ),
+            list: jest.fn().mockImplementation(({ account_id, schedule_id }) =>
+              Promise.resolve([
+                {
+                  account_id: 223,
+                  schedule_id: '7b07c65e-d681-4598-be1f-e0652c2bc5ee',
+                  start_time: new Date('2024-06-07T01:00:00.000Z'),
+                  duration: 200,
+                  type: TaskType.work,
+                  id: '63872dfe-760c-40e3-a725-dfb5bcebd017',
+                },
+              ]),
+            ),
+            get: jest.fn().mockImplementation((id: string) =>
+              Promise.resolve({
+                account_id: 223,
+                agent_id: 22222233,
+                start_time: new Date('2024-06-07T01:00:00.000Z'),
+                end_time: new Date('2024-06-07T03:00:00.000Z'),
+                id,
+              }),
+            ),
+            delete: jest.fn(),
           },
         },
       ],
     }).compile();
 
     taskController = app.get<TaskController>(TaskController);
+    taskService = app.get<TaskService>(TaskService);
   });
 
-  describe('Task', () => {
-    it('should return a Task with a valid id', async () => {
-      const result = await taskController.getTask({
-        id: '7dc5319f-69b0-4934-827b-60191fc289b0',
+  it('should be defined', () => {
+    expect(taskController).toBeDefined();
+  });
+
+  describe('create()', () => {
+    it('should create a task', () => {
+      taskController.create(taskCreateDTO);
+      expect(taskController.create(taskCreateDTO)).resolves.toEqual({
+        id: '63872dfe-760c-40e3-a725-dfb5bcebd017',
+        ...taskCreateDTO,
       });
-      expect(result.data).toEqual(mockTask);
+      expect(taskService.create).toHaveBeenCalledWith(taskCreateDTO);
+    });
+  });
+
+  describe('update()', () => {
+    it('should update a task', () => {
+      taskController.update(
+        '63872dfe-760c-40e3-a725-dfb5bcebd017',
+        taskCreateDTO,
+      );
+      expect(
+        taskController.update(
+          '63872dfe-760c-40e3-a725-dfb5bcebd017',
+          taskCreateDTO,
+        ),
+      ).resolves.toEqual({
+        id: '63872dfe-760c-40e3-a725-dfb5bcebd017',
+        ...taskCreateDTO,
+      });
+      expect(taskService.update).toHaveBeenCalledWith(
+        '63872dfe-760c-40e3-a725-dfb5bcebd017',
+        taskCreateDTO,
+      );
+    });
+  });
+
+  describe('list()', () => {
+    it('should find a list of tasks', () => {
+      expect(
+        taskController.list({ account_id: 233, schedule_id: null }),
+      ).resolves.toEqual([
+        {
+          account_id: 223,
+          schedule_id: '7b07c65e-d681-4598-be1f-e0652c2bc5ee',
+          start_time: new Date('2024-06-07T01:00:00.000Z'),
+          duration: 200,
+          type: TaskType.work,
+          id: '63872dfe-760c-40e3-a725-dfb5bcebd017',
+        },
+      ]);
+      expect(taskService.list).toHaveBeenCalled();
+    });
+  });
+
+  describe('get()', () => {
+    it('should find a task', () => {
+      expect(
+        taskController.get('63872dfe-760c-40e3-a725-dfb5bcebd017'),
+      ).resolves.toEqual({
+        account_id: 223,
+        agent_id: 22222233,
+        start_time: new Date('2024-06-07T01:00:00.000Z'),
+        end_time: new Date('2024-06-07T03:00:00.000Z'),
+        id: '63872dfe-760c-40e3-a725-dfb5bcebd017',
+      });
+      expect(taskService.get).toHaveBeenCalled();
+    });
+  });
+
+  describe('delete()', () => {
+    it('should delete the task', () => {
+      taskController.delete('63872dfe-760c-40e3-a725-dfb5bcebd017');
+      expect(taskService.delete).toHaveBeenCalled();
     });
   });
 });

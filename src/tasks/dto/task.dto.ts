@@ -1,6 +1,6 @@
 import { TaskType } from '../task.interface';
 
-export class CreateTaskDTO {
+export class TaskCreateDTO {
   account_id: number;
   schedule_id: string;
   start_time: Date;

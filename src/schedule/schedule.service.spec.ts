@@ -1,23 +1,38 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ScheduleService } from './schedule.service';
-import { Schedule } from './schedule.entity';
-import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { Schedule } from './schedule.entity';
+import { ScheduleService } from './schedule.service';
+import { Repository } from 'typeorm';
+import { Task } from '../tasks/task.entity';
+
+const scheduleArray = [
+  {
+    account_id: 223,
+    agent_id: 353,
+    start_time: new Date('2024-06-07T01:00:00.000Z'),
+    end_time: new Date('2024-06-07T01:00:00.000Z'),
+    id: '53872dfe-760c-40e3-a725-dfb5bcebd017',
+  },
+  {
+    account_id: 223,
+    agent_id: 333,
+    start_time: new Date('2024-06-07T01:00:00.000Z'),
+    end_time: new Date('2024-06-07T01:00:00.000Z'),
+    id: '93872dfe-760c-40e3-a725-dfb5bcebd017',
+  },
+];
+
+const oneSchedule = {
+  account_id: 223,
+  agent_id: 333,
+  start_time: new Date('2024-06-07T01:00:00.000Z'),
+  end_time: new Date('2024-06-07T01:00:00.000Z'),
+  id: '93872dfe-760c-40e3-a725-dfb5bcebd017',
+};
 
 describe('ScheduleService', () => {
-  let scheduleService: ScheduleService;
-  let scheduleRepository: Repository<Schedule>;
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  const scheduleRepositoryToken: string | Function =
-    getRepositoryToken(Schedule);
-
-  const mockSchedule = {
-    id: 'e69a62ae-c69d-4360-a736-0363af78a934',
-    account_id: 1111,
-    agent_id: 2222,
-    start_time: new Date(),
-    end_time: new Date(),
-  };
+  let service: ScheduleService;
+  let repository: Repository<Schedule>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -25,38 +40,72 @@ describe('ScheduleService', () => {
         ScheduleService,
         {
           provide: getRepositoryToken(Schedule),
-          useClass: Repository,
+          useValue: {
+            findBy: jest.fn().mockResolvedValue(scheduleArray),
+            findOneBy: jest.fn().mockResolvedValue(oneSchedule),
+            save: jest.fn().mockResolvedValue(oneSchedule),
+            delete: jest.fn().mockResolvedValue({ affected: 1 }),
+          },
+        },
+        {
+          provide: getRepositoryToken(Task),
+          useValue: {
+            findBy: jest.fn().mockResolvedValue(oneSchedule),
+          },
         },
       ],
     }).compile();
 
-    scheduleService = module.get<ScheduleService>(ScheduleService);
-    scheduleRepository = module.get<Repository<Schedule>>(
-      scheduleRepositoryToken,
-    );
+    service = module.get<ScheduleService>(ScheduleService);
+    repository = module.get<Repository<Schedule>>(getRepositoryToken(Schedule));
   });
 
-  describe('schedule', () => {
-    it('should return a schedule with a valid id', async () => {
-      scheduleService.getOne = jest
-        .fn()
-        .mockImplementationOnce(() =>
-          Promise.resolve({ schedule: mockSchedule }),
-        );
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
 
-      const result = await scheduleService.getOne(
-        `e69a62ae-c69d-4360-a736-0363af78a934`,
-      );
-      expect(result?.schedule).toEqual(mockSchedule);
+  describe('create()', () => {
+    it('should successfully insert a schedule', () => {
+      expect(
+        service.create({
+          account_id: 223,
+          agent_id: 333,
+          start_time: new Date('2024-06-07T01:00:00.000Z'),
+          end_time: new Date('2024-06-07T01:00:00.000Z'),
+        }),
+      ).resolves.toEqual(oneSchedule);
     });
+  });
 
-    it('should return error with a invalid id', async () => {
-      jest.spyOn(scheduleRepository, 'findOneBy').mockResolvedValueOnce(null);
+  describe('list()', () => {
+    it('should return an array of schedules', async () => {
+      const schedules = await service.list({ account_id: 223 });
+      expect(schedules).toEqual(scheduleArray);
+    });
+  });
 
-      const result = await scheduleService.getOne(
-        `111111-1111-1111-1111-1111111`,
+  describe('get()', () => {
+    it('should get a single schedule', () => {
+      const repoSpy = jest.spyOn(repository, 'findOneBy');
+      expect(
+        service.get('93872dfe-760c-40e3-a725-dfb5bcebd017'),
+      ).resolves.toEqual(oneSchedule);
+      expect(repoSpy).toBeCalledWith({
+        id: '93872dfe-760c-40e3-a725-dfb5bcebd017',
+      });
+    });
+  });
+
+  describe('delete()', () => {
+    it('should call delete with the passed value', async () => {
+      const removeSpy = jest.spyOn(repository, 'delete');
+      const retVal = await service.delete(
+        '93872dfe-760c-40e3-a725-dfb5bcebd017',
       );
-      expect(result?.schedule).toEqual(undefined);
+      expect(removeSpy).toBeCalledWith({
+        id: '93872dfe-760c-40e3-a725-dfb5bcebd017',
+      });
+      expect(retVal.message).toBe("Schedule 93872dfe-760c-40e3-a725-dfb5bcebd017 deleted");
     });
   });
 });

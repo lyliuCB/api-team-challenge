@@ -1,9 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DeleteResult, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Task } from './task.entity';
-import { CreateTaskDTO } from './dto/create-task.dto';
-import { TaskRO, TasksRO } from './task.interface';
+import { TaskCreateDTO } from './dto/task.dto';
 import { UUID } from 'crypto';
 import { Schedule } from '../schedule/schedule.entity';
 
@@ -16,51 +19,78 @@ export class TaskService {
     private readonly scheduleRepository: Repository<Schedule>,
   ) {}
 
-  async getAll(query: any): Promise<TasksRO> {
-    let tasks;
-    if (query.account_id || query.agent_id) {
-      tasks = await this.taskRepository.findBy(query);
+  /*
+   * Get task list with query
+   */
+  async list({ account_id, schedule_id }: any): Promise<Task[]> {
+    if (account_id || schedule_id) {
+      return await this.taskRepository.findBy({
+        account_id,
+        schedule_id,
+      });
     } else {
-      tasks = await this.taskRepository.find();
+      throw new BadRequestException(
+        'Supported query params: [schedule_id, account_id]',
+      );
+    }
+  }
+  /*
+   *  Get task based on id
+   */
+  async get(id: UUID): Promise<Task | null> {
+    const result = await this.taskRepository.findOneBy({ id });
+    if (result) {
+      return result;
+    } else {
+      throw new NotFoundException(`Task ${id} not found`);
+    }
+  }
+  /*
+   *  Create a new task
+   */
+  async create(data: TaskCreateDTO): Promise<Task> {
+    const schedule = await this.scheduleRepository.findOneBy({
+      id: data?.schedule_id,
+    });
+    if (!schedule) {
+      throw new BadRequestException(`Schedule ${data?.schedule_id} not found`);
+    } else {
+      return await this.taskRepository.save(data);
+    }
+  }
+  /*
+   * update a task based on id
+   */
+  async update(id: UUID, dto: TaskCreateDTO): Promise<Task> {
+    const schedule = await this.scheduleRepository.findOneBy({
+      id: dto?.schedule_id,
+    });
+    if (!schedule) {
+      throw new BadRequestException(`Schedule ${dto?.schedule_id} not found`);
     }
 
-    const tasksCount = tasks.length;
-    return { tasks, tasksCount };
-  }
-
-  async getOne(id: UUID): Promise<TaskRO | null> {
     const task = await this.taskRepository.findOneBy({ id });
     if (task) {
-      return { task };
+      task.account_id = dto.account_id || task.account_id;
+      task.schedule_id = dto.schedule_id || task.schedule_id;
+      task.start_time = dto.start_time || task.start_time;
+      task.duration = dto.duration || task.duration;
+      task.type = dto.type || task.type;
+
+      return await this.taskRepository.save(task);
     } else {
-      return task;
+      throw new BadRequestException(`Task ${id} not exist`);
     }
   }
-
-  async create(data: CreateTaskDTO): Promise<TaskRO> {
-    const id = data.schedule_id;
-    const schedule = await this.scheduleRepository.findOneBy({ id });
-    if (!schedule) {
-      throw new NotFoundException(`Schedule ${id} not found`);
+  /*
+   * delete a task based on id
+   */
+  async delete(id: UUID): Promise<any> {
+    const result = await this.taskRepository.delete({ id });
+    if (!result.affected) {
+      throw new BadRequestException(`Task ${id} not existed`);
     } else {
-      const task = await this.taskRepository.save(data);
-      return { task };
+      return { message: `Task ${id} deleted` };
     }
-  }
-
-  async update(id: UUID, data: CreateTaskDTO): Promise<TaskRO> {
-    const task = new Task();
-    task.id = id;
-    task.account_id = data.account_id;
-    task.schedule_id = data.schedule_id;
-    task.start_time = data.start_time;
-    task.duration = data.duration;
-    task.type = data.type;
-    await this.taskRepository.update(id, task);
-    return { task };
-  }
-
-  async delete(id: UUID): Promise<DeleteResult> {
-    return await this.taskRepository.delete({ id });
   }
 }
