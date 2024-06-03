@@ -1,3 +1,10 @@
+## Prequisition
+
+```bash
+Node Version V20
+Postgres
+```
+
 ## Installation
 
 ```bash
